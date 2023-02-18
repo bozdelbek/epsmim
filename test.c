@@ -28,6 +28,21 @@ int main2() {
 	return 0;
 }
 
+int write_to_file(const char *filename, double *arr, int size) {
+	int flags = O_RDWR | O_CREATE;
+	int fd = open(filename, flags);
+	if (fd == -1) {
+		perror("open");
+		return -1;
+	}
+	if (write(fd, arr, size * sizeof(double)) == -1) {
+		perror("write");
+		close(fd);
+		return -2;
+	}
+	close(fd);
+}
+
 int main() {
 	printf("%d\n", sizeof(double));
 	double arr[100] = { 0 };
