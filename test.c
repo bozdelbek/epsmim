@@ -20,9 +20,10 @@ double myexp(double x) {
 	return exp(-x);
 }
 
-int main2() {
-	for (double x = 0.0; x < 500.0; x += 0.1) {
-		printf("%f %f\n", x, f(x, 0.01));
+int main() {
+	double tou = 0.01;
+	for (int n = 0; n < 500; n++) {
+		printf("%d %f\n", n, f(n, tou));
 		// printf("%f %f\n", x, myexp(x) * mysin(10.0*x));
 	}
 	return 0;
@@ -45,7 +46,7 @@ int write_to_file(char *filename, double *arr, int size) {
 	return 0;
 }
 
-int main() {
+int main2() {
 	printf("%d\n", sizeof(double));
 	double arr[100] = { 0 };
 	for (int i = 0; i < 10; i++) {

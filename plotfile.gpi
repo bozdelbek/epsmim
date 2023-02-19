@@ -3,4 +3,4 @@
 set yrange [-3:3]
 set xrange [0:500]
 
-plot 'exp' using 1:2 with lines
+plot 'nums' using 1:2 with lines

@@ -20,7 +20,7 @@ typedef struct {
 } modeling_plane;
 
 int write_to_file(char *filename, double *arr, int size) {
-	int flags = O_WRONLY | O_CREAT | (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	int flags = O_WRONLY | O_CREAT | O_TRUNC | (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	int fd = open(filename, flags);
 	if (fd == -1) {
 		perror("open");
@@ -51,10 +51,10 @@ int init_modeling_plane(modeling_plane *plane, int Nx, int Ny, int Sx, int Sy) {
 	// maybe i can use memset?
 	for (int i = 0; i < Nx; i++) {
 		for (int j = 0; j < Ny; j++) {
-			plane->prev[i * Ny + j] = 0.0;
-			plane->curr[i * Ny + j] = 0.0;
-			plane->next[i * Ny + j] = 0.0;
-			plane->phase[i * Ny + j] = 0.01;
+			plane->prev[I(i,j)] = 0.0;
+			plane->curr[I(i,j)] = 0.0;
+			plane->next[I(i,j)] = 0.0;
+			plane->phase[I(i,j)] = 0.01;
 		}
 	}
 	return 0;
@@ -78,8 +78,8 @@ void calc_step(modeling_plane *plane, double tou) {
 	int Sy = plane->Sy;
 	static int n = 1;
 	double tousq = tou * tou;
-	double rev_hxsq = (double)(Nx - 1)*(Nx - 1) / 16.0;
-	double rev_hysq = (double)(Ny - 1)*(Ny - 1) / 16.0;
+	double rev_hxsq = (double)((Nx - 1)*(Nx - 1)) / 16.0;
+	double rev_hysq = (double)((Ny - 1)*(Ny - 1)) / 16.0;
 	for (int i = 1; i < Nx - 1; i++) {
 		for (int j = 1; j < Ny - 1; j++) {
 			//don't forget to mul by hx\hy
@@ -87,10 +87,10 @@ void calc_step(modeling_plane *plane, double tou) {
 							(curr[I(i, j-1)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i, j-1)]);
 			double elem_y = (curr[I(i+1, j)] - curr[I(i, j)]) * (phase[I(i, j-1)] + phase[I(i, j)]) +
 							(curr[I(i-1, j)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i-1, j)]);
-			next[I(i, j)] = 2.0 * curr[I(i, j)] - prev[I(i, j)] + tousq * (elem_x * rev_hxsq + elem_y * rev_hysq);
+			next[I(i, j)] = 2.0 * curr[I(i, j)] - prev[I(i, j)] + tousq * (elem_x * rev_hxsq + elem_y * rev_hysq) * 0.5;
 		}
 	}
-	next[Sy * Nx + Sx] += tousq * f(n, tou);
+	next[I(Sx, Sy)] += tousq * f(n, tou);
 	plane->prev = curr;
 	plane->curr = next;
 	n++;
@@ -131,14 +131,17 @@ int main(int argc, char *argv[]) {
 
 	char fname[100] = { 0 };
 
-	for (int i = 1; i < 250; i++) {
+	for (int i = 1; i < 300; i++) {
 		calc_step(&plane, tou);
-		sprintf(fname, "prev%d", i);
-		write_to_file(fname, plane.prev, Nx * Ny);
+		// sprintf(fname, "prev%d", i);
+		// write_to_file(fname, plane.prev, Nx * Ny);
 		sprintf(fname, "curr%d", i);
 		write_to_file(fname, plane.curr, Nx * Ny);
-		sprintf(fname, "next%d", i);
-		write_to_file(fname, plane.next, Nx * Ny);
+		// sprintf(fname, "next%d", i);
+		// write_to_file(fname, plane.next, Nx * Ny);
+		/*if (i % 10 == 0) {
+			write_to_file(fname, plane.curr, Nx * Ny);
+		}*/
 	}
 
 	return 0;
