@@ -28,6 +28,22 @@ int main2() {
 	return 0;
 }
 
+int write_to_file(char *filename, double *arr, int size) {
+	int flags = O_WRONLY | O_CREAT | (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	int fd = open(filename, flags);
+	if (fd == -1) {
+		perror("open");
+		return -1;
+	}
+	if (write(fd, arr, size * sizeof(double)) == -1) {
+		perror("write");
+		close(fd);
+		return -2;
+	}
+	close(fd);
+	return 0;
+}
+
 int main() {
 	printf("%d\n", sizeof(double));
 	double arr[100] = { 0 };
@@ -36,8 +52,6 @@ int main() {
 			arr[i * 10 + j] = (double)i * j;
 		}
 	}
-	int fd = open("file.dat", O_RDWR | O_CREAT);
-	write(fd, arr, 100 * sizeof(double));
-	close(fd);
+	write_to_file("testfile", arr, 100);
 	return 0;
 }

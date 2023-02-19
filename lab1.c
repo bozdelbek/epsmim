@@ -1,9 +1,64 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <math.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define I(a, b) ( (a) * Nx + (b) )
+
+typedef struct {
+	double *prev;
+	double *curr;
+	double *next;
+	double *phase;
+	int Nx;
+	int Ny;
+	int Sx;
+	int Sy;
+} modeling_plane;
+
+int write_to_file(char *filename, double *arr, int size) {
+	int flags = O_WRONLY | O_CREAT | (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	int fd = open(filename, flags);
+	if (fd == -1) {
+		perror("open");
+		return -1;
+	}
+	if (write(fd, arr, size * sizeof(double)) == -1) {
+		perror("write");
+		close(fd);
+		return -2;
+	}
+	close(fd);
+	return 0;
+}
+
+int init_modeling_plane(modeling_plane *plane, int Nx, int Ny, int Sx, int Sy) {
+	plane->Nx = Nx;
+	plane->Ny = Ny;
+	plane->Sx = Sx;
+	plane->Sy = Sy;
+	plane->prev = (double*)malloc(Nx * Ny * sizeof(double));
+	plane->curr = (double*)malloc(Nx * Ny * sizeof(double));
+	plane->next = (double*)malloc(Nx * Ny * sizeof(double));
+	plane->phase = (double*)malloc(Nx * Ny * sizeof(double));
+	if (plane->prev == NULL || plane->curr == NULL || plane->next == NULL || plane->phase == NULL) {
+		perror("malloc");
+		return -1;
+	}
+	// maybe i can use memset?
+	for (int i = 0; i < Nx; i++) {
+		for (int j = 0; j < Ny; j++) {
+			plane->prev[i * Ny + j] = 0.0;
+			plane->curr[i * Ny + j] = 0.0;
+			plane->next[i * Ny + j] = 0.0;
+			plane->phase[i * Ny + j] = 0.01;
+		}
+	}
+	return 0;
+}
 
 double f(int n, double tou) {
 	double rev_gammasq = 1 / 16.0;
@@ -12,7 +67,15 @@ double f(int n, double tou) {
 	return exp(exp_arg) * sin(tmp);
 }
 
-void calc_step(double *prev, double *curr, double *next, double *phase, double tou, int Nx, int Ny, int Sx, int Sy) {
+void calc_step(modeling_plane *plane, double tou) {
+	double *prev = plane->prev;
+	double *curr = plane->curr;
+	double *next = plane->next;
+	double *phase = plane->phase;
+	int Nx = plane->Nx;
+	int Ny = plane->Ny;
+	int Sx = plane->Sx;
+	int Sy = plane->Sy;
 	static int n = 1;
 	double tousq = tou * tou;
 	double rev_hxsq = (double)(Nx - 1)*(Nx - 1) / 16.0;
@@ -28,6 +91,8 @@ void calc_step(double *prev, double *curr, double *next, double *phase, double t
 		}
 	}
 	next[Sy * Nx + Sx] += tousq * f(n, tou);
+	plane->prev = curr;
+	plane->curr = next;
 	n++;
 }
 
@@ -52,18 +117,28 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	printf("Nx: %d, Ny: %d, Nt: %d\n", Nx, Ny, Nt);
+
+	int Sx = Nx / 2;
+	int Sy = Ny / 2;
 	
-	double *prev = (double*)malloc(Nx * Ny * sizeof(double));
-	double *curr = (double*)malloc(Nx * Ny * sizeof(double));
-	double *next = (double*)malloc(Nx * Ny * sizeof(double));
-	double *phase = (double*)malloc(Nx * Ny * sizeof(double));
-	// ---------------
-	for (int i = 0; i < Nx; i++) {
-		for (int j = 0; j < Ny; j++) {
-			prev[i * Ny + j] = 0.0;
-			curr[i * Ny + j] = 0.0;
-			phase[i * Ny + j] = 0.0;
-		}
+	modeling_plane plane;
+	if (init_modeling_plane(&plane, Nx, Ny, Sx, Sy) == -1) {
+		fprintf(stderr, "error in init_modeling_plane\n");
+		exit(-1);
+	}
+
+	double tou = 0.1;
+
+	char fname[100] = { 0 };
+
+	for (int i = 1; i < 250; i++) {
+		calc_step(&plane, tou);
+		sprintf(fname, "prev%d", i);
+		write_to_file(fname, plane.prev, Nx * Ny);
+		sprintf(fname, "curr%d", i);
+		write_to_file(fname, plane.curr, Nx * Ny);
+		sprintf(fname, "next%d", i);
+		write_to_file(fname, plane.next, Nx * Ny);
 	}
 
 	return 0;
