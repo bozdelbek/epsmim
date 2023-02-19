@@ -28,6 +28,7 @@ int main2() {
 	return 0;
 }
 
+
 int write_to_file(char *filename, double *arr, int size) {
 	int flags = O_WRONLY | O_CREAT | (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	int fd = open(filename, flags);
