@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <assert.h>
 
 #define I(a, b) ( (a) * Nx + (b) )
 
@@ -64,7 +65,7 @@ double f(int n, double tou) {
 	double rev_gammasq = 1 / 16.0;
 	double tmp = (2 * M_PI * (n * tou - 1.5));
 	double exp_arg = - ( tmp * tmp * rev_gammasq);
-	return exp(exp_arg) * sin(tmp);
+	return exp(exp_arg) * sin(tmp) * 0.5;
 }
 
 void calc_step(modeling_plane *plane, double tou) {
@@ -80,20 +81,51 @@ void calc_step(modeling_plane *plane, double tou) {
 	double tousq = tou * tou;
 	double rev_hxsq = (double)((Nx - 1)*(Nx - 1)) / 16.0;
 	double rev_hysq = (double)((Ny - 1)*(Ny - 1)) / 16.0;
+	double hy = 4.0 / (double)(Nx - 1);
+	double hx = 4.0 / (double)(Ny - 1);
+	double hxsq = hx * hx;
+	double hysq = hy * hy;
 	for (int i = 1; i < Nx - 1; i++) {
 		for (int j = 1; j < Ny - 1; j++) {
+
 			//don't forget to mul by hx\hy
-			double elem_x = (curr[I(i, j+1)] - curr[I(i, j)]) * (phase[I(i-1, j)] + phase[I(i, j)]) +
-							(curr[I(i, j-1)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i, j-1)]);
-			double elem_y = (curr[I(i+1, j)] - curr[I(i, j)]) * (phase[I(i, j-1)] + phase[I(i, j)]) +
-							(curr[I(i-1, j)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i-1, j)]);
-			next[I(i, j)] = 2.0 * curr[I(i, j)] - prev[I(i, j)] + tousq * (elem_x * rev_hxsq + elem_y * rev_hysq) * 0.5;
+			// double elem_x = (curr[I(i, j+1)] - curr[I(i, j)]) * (phase[I(i-1, j)] + phase[I(i, j)]) +
+			// 				(curr[I(i, j-1)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i, j-1)]);
+			// double elem_y = (curr[I(i+1, j)] - curr[I(i, j)]) * (phase[I(i, j-1)] + phase[I(i, j)]) +
+			// 				(curr[I(i-1, j)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i-1, j)]);
+			double elem_x = (curr[I(i, j+1)] - curr[I(i, j)]) + (curr[I(i, j-1)] - curr[I(i, j)]);
+			double elem_y = (curr[I(i+1, j)] - curr[I(i, j)]) +	(curr[I(i-1, j)] - curr[I(i, j)]);
+			elem_x *= 0.02;
+			elem_y *= 0.02;
+			// next[I(i, j)] = 2.0 * curr[I(i, j)] - prev[I(i, j)] + tousq * (elem_x * rev_hxsq + elem_y * rev_hysq) * 0.5;
+			next[I(i, j)] = 2.0 * curr[I(i, j)] - prev[I(i, j)] + tousq * (elem_x / (2 * hxsq) + elem_y / (2 * hysq));
+			if (next[I(i,j)] < -10 || 10 < next[I(i,j)]) {
+				printf("(%d, %d, [%d]) %lf %lf %lf\n", i, j, n, elem_x, elem_y, next[I(i,j)]);
+				usleep(100000);
+			}
+			// assert(next[I(i,j)] < 1000.0);
+			/*if (-1000.0 > next[I(i,j)] || next[I(i,j)] > 1000.0) {
+				printf("i: %d, j: %d (U = %f)\n", i, j, next[I(i,j)]);
+				sleep(1);
+				// assert(next[I(i,j)] < 1000);
+			}*/
 		}
 	}
 	next[I(Sx, Sy)] += tousq * f(n, tou);
 	plane->prev = curr;
 	plane->curr = next;
 	n++;
+}
+
+void print_m(double *arr, int Nx, int Ny) {
+	for (int i = 0; i < Nx; i++) {
+		for (int j = 0; j < Ny; j++) {
+			if (arr[I(i,j)] > 1000 || arr[I(i,j)] < -1000) {
+				printf("(%d, %d) %f\n", i, j, arr[I(i,j)]);
+			}
+			
+		}
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -137,6 +169,9 @@ int main(int argc, char *argv[]) {
 		// write_to_file(fname, plane.prev, Nx * Ny);
 		sprintf(fname, "curr%d", i);
 		write_to_file(fname, plane.curr, Nx * Ny);
+		if (i == 1) {
+			print_m(plane.curr, Nx, Ny);
+		}
 		// sprintf(fname, "next%d", i);
 		// write_to_file(fname, plane.next, Nx * Ny);
 		/*if (i % 10 == 0) {
