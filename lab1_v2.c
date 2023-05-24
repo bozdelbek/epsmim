@@ -44,7 +44,8 @@ int init_modeling_plane(modeling_plane *plane, int Nx, int Ny, int Sx, int Sy) {
 	plane->Sy = Sy;
 	plane->prev = (double*)malloc(Nx * Ny * sizeof(double));
 	plane->curr = (double*)malloc(Nx * Ny * sizeof(double));
-	plane->next = (double*)malloc(Nx * Ny * sizeof(double));
+	// plane->next = (double*)malloc(Nx * Ny * sizeof(double));
+	plane->next = plane->prev;
 	plane->phase = (double*)malloc(Nx * Ny * sizeof(double));
 	if (plane->prev == NULL || plane->curr == NULL || plane->next == NULL || plane->phase == NULL) {
 		perror("malloc");
@@ -90,28 +91,54 @@ void calc_step(modeling_plane *plane, double tou) {
 	double hy = 4.0 / (double)(Nx - 1);
 	double hx = 4.0 / (double)(Ny - 1);
 	
-	const double phixt = tou / hx;
-	const double phix = phixt * phixt * 0.5;
-	const double phiyt = tou / hy;
-	const double phiy = phiyt * phiyt * 0.5;
+	double phixt = tou / hx;
+	double phix = phixt * phixt * 0.5;
+	double phiyt = tou / hy;
+	double phiy = phiyt * phiyt * 0.5;
 
 	int i = 1;
 	int j = 1;
 
 	double elem_x = 0.0;
 	double elem_y = 0.0;
+
+	double *curr_lwr = NULL;
+	double *curr_mdl = NULL;
+	double *curr_upr = NULL;
+
+	double *phase_lwr = NULL;
+	double *phase_mdl = NULL;
+
+	double *prev_mdl = NULL;
+	double *next_mdl = NULL;
 	for (i = 1; i < Nx - 1; i++) {
+
+		curr_lwr = curr + (i - 1) * Ny;
+		curr_mdl = curr + (i) * Ny;
+		curr_upr = curr + (i + 1) * Ny;
+
+		phase_lwr = phase + (i - 1) * Ny;
+		phase_mdl = phase + (i) * Ny;
+
+		next_mdl = next + (i) * Ny;
+		prev_mdl = prev + (i) * Ny;
+
 		for (j = 1; j < Ny - 1; j++) {
 
-			elem_x = (curr[I(i, j+1)] - curr[I(i, j)]) * (phase[I(i-1, j)] + phase[I(i, j)]) +
+			elem_x = (curr_mdl[j+1] - curr_mdl[j]) * (phase_lwr[j] + phase_mdl[j]) +
+						(curr_mdl[j - 1] - curr_mdl[j]) * (phase_lwr[j - 1] + phase_mdl[j - 1]);
+			elem_y = (curr_upr[j] - curr_mdl[j]) * (phase_mdl[j - 1] + phase_mdl[j]) +
+						(curr_lwr[j] - curr_mdl[j]) * (phase_lwr[j - 1] + phase_lwr[j]);
+
+			/*elem_x = (curr[I(i, j+1)] - curr[I(i, j)]) * (phase[I(i-1, j)] + phase[I(i, j)]) +
 							(curr[I(i, j-1)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i, j-1)]);
 			elem_y = (curr[I(i+1, j)] - curr[I(i, j)]) * (phase[I(i, j-1)] + phase[I(i, j)]) +
-							(curr[I(i-1, j)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i-1, j)]);
+							(curr[I(i-1, j)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i-1, j)]);*/
 
 			elem_x *= phix;
 			elem_y *= phiy;
 
-			next[I(i, j)] = 2.0 * curr[I(i, j)] - prev[I(i, j)] + elem_x + elem_y;
+			next_mdl[j] = 2.0 * curr_mdl[j] - prev_mdl[j] + elem_x + elem_y;
 
 		}
 	}
@@ -120,6 +147,7 @@ void calc_step(modeling_plane *plane, double tou) {
 	plane->prev = curr;
 	plane->curr = next;
 	plane->next = prev;
+	plane->next = plane->prev;
 	n++;
 }
 
@@ -165,8 +193,8 @@ int main(int argc, char *argv[]) {
 	}
 	printf("Nx: %d, Ny: %d, Nt: %d\n", Nx, Ny, Nt);
 
-	int Sx = 1;
-	int Sy = 1;
+	int Sx = Nx / 2;
+	int Sy = Ny / 2;
 	
 	modeling_plane plane;
 	if (init_modeling_plane(&plane, Nx, Ny, Sx, Sy) == -1) {
