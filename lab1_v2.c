@@ -9,11 +9,18 @@
 
 #define I(a, b) ( (a) * Ny + (b) )
 
+// only for processed_phase use
+#define HD(i, j) (I((i) * 2    , (j)    )) // horizontal down (i)
+#define HU(i, j) (I((i) * 2 - 2, (j)    )) // horizontal down (i - 1)
+#define VR(i, j) (I((i) * 2 - 1, (j)    )) // vertical right (j)
+#define VL(i, j) (I((i) * 2 - 1, (j) - 1)) // vertical left (j - 1)
+
 typedef struct {
 	double *prev;
 	double *curr;
 	double *next;
 	double *phase;
+	double *processed_phase;
 	int Nx;
 	int Ny;
 	int Sx;
@@ -37,11 +44,34 @@ int write_to_file(char *filename, double *arr, int size) {
 	return 0;
 }
 
+void process_phase(modeling_plane *plane) {
+	int Nx = plane->Nx;
+	int Ny = plane->Ny;
+	double *phase = plane->phase;
+	double *processed_phase = plane->processed_phase;
+
+
+	double hd, hu, vl, vr;
+	for (int i = 1; i < Nx - 1; i++) {
+		for (int j = 1; j < Ny - 1; j++) {
+			hd = phase[I(i    , j    )] + phase[I(i    , j - 1)];
+			hu = phase[I(i - 1, j    )] + phase[I(i - 1, j - 1)];
+			vr = phase[I(i    , j    )] + phase[I(i - 1, j    )];
+			vl = phase[I(i    , j - 1)] + phase[I(i - 1, j - 1)];
+			processed_phase[HD(i, j)] = hd;
+			processed_phase[HU(i, j)] = hu;
+			processed_phase[VR(i, j)] = vr;
+			processed_phase[VL(i, j)] = vl;
+		}
+	}
+}
+
 int init_modeling_plane(modeling_plane *plane, int Nx, int Ny, int Sx, int Sy) {
 	plane->Nx = Nx;
 	plane->Ny = Ny;
 	plane->Sx = Sx;
 	plane->Sy = Sy;
+	plane->processed_phase = (double*)malloc(Ny * (2 * Nx - 1) * sizeof(double));
 	plane->prev = (double*)malloc(Nx * Ny * sizeof(double));
 	plane->curr = (double*)malloc(Nx * Ny * sizeof(double));
 	// plane->next = (double*)malloc(Nx * Ny * sizeof(double));
@@ -65,8 +95,24 @@ int init_modeling_plane(modeling_plane *plane, int Nx, int Ny, int Sx, int Sy) {
 			plane->phase[I(i,j)] = 0.02;
 		}
 	}
+
+	process_phase(plane);
+
 	return 0;
 }
+
+void _process_n(double *phase_lwr, double *phase_mdl, double *res) {
+	for (int i = 0; i < 4; i++) {
+		res[i] = phase_lwr[i] + phase_mdl[i];
+	}
+	for (int i = 0; i < 3; i++) {
+		res[4 + i] = phase_lwr[i] + phase_lwr[i + 1];
+		res[4 + i + 3] = phase_mdl[i] + phase_mdl[i + 1];
+	}
+}
+
+
+
 
 double f(int n, double tou) {
 	double rev_gammasq = 1 / 16.0;
@@ -75,11 +121,22 @@ double f(int n, double tou) {
 	return exp(exp_arg) * sin(tmp) * 0.5;
 }
 
+void print_arr(double *arr, int Nx, int Ny) {
+	for (int i = 0; i < Nx; i++) {
+		for (int j = 0; j < Ny; j++) {
+			printf("%f ", arr[i * Ny + j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
 void calc_step(modeling_plane *plane, double tou) {
 	double *prev = plane->prev;
 	double *curr = plane->curr;
 	double *next = plane->next;
 	double *phase = plane->phase;
+	double *proc_phase = plane->processed_phase;
 	int Nx = plane->Nx;
 	int Ny = plane->Ny;
 	int Sx = plane->Sx;
@@ -125,16 +182,39 @@ void calc_step(modeling_plane *plane, double tou) {
 
 		for (j = 1; j < Ny - 1; j++) {
 
-			elem_x = (curr_mdl[j+1] - curr_mdl[j]) * (phase_lwr[j] + phase_mdl[j]) +
+
+			/*double hu, hd, vl, vr;
+			hu = phase_lwr[j - 1] + phase_lwr[j];
+			hd = phase_mdl[j - 1] + phase_mdl[j];
+			vl = phase_lwr[j - 1] + phase_mdl[j - 1];
+			vr = phase_lwr[j] + phase_mdl[j];*/
+
+			double hun, hdn, vln, vrn;
+			hdn = proc_phase[HD(i, j)];
+			hun = proc_phase[HU(i, j)];
+			vrn = proc_phase[VR(i, j)];
+			vln = proc_phase[VL(i, j)];
+			/*if (hd != hdn) {
+				printf("i,j (%d, %d), hd: %f, hdn: %f\n", i, j, hd, hdn);
+				print_arr(phase, Nx, Ny);
+				print_arr(proc_phase, 2 * Nx - 1, Ny);
+			}
+			assert(hd == hdn);
+			assert(hu == hun);
+			assert(vl == vln);
+			assert(vr == vrn);*/
+
+			/*elem_x = (curr_mdl[j+1] - curr_mdl[j]) * (phase_lwr[j] + phase_mdl[j]) +
 						(curr_mdl[j - 1] - curr_mdl[j]) * (phase_lwr[j - 1] + phase_mdl[j - 1]);
 			elem_y = (curr_upr[j] - curr_mdl[j]) * (phase_mdl[j - 1] + phase_mdl[j]) +
-						(curr_lwr[j] - curr_mdl[j]) * (phase_lwr[j - 1] + phase_lwr[j]);
+						(curr_lwr[j] - curr_mdl[j]) * (phase_lwr[j - 1] + phase_lwr[j]);*/
 
-			/*elem_x = (curr[I(i, j+1)] - curr[I(i, j)]) * (phase[I(i-1, j)] + phase[I(i, j)]) +
-							(curr[I(i, j-1)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i, j-1)]);
-			elem_y = (curr[I(i+1, j)] - curr[I(i, j)]) * (phase[I(i, j-1)] + phase[I(i, j)]) +
-							(curr[I(i-1, j)] - curr[I(i, j)]) * (phase[I(i-1, j-1)] + phase[I(i-1, j)]);*/
+			elem_x = (curr_mdl[j+1] - curr_mdl[j]) * (vrn) +
+						(curr_mdl[j - 1] - curr_mdl[j]) * (vln);
+			elem_y = (curr_upr[j] - curr_mdl[j]) * (hdn) +
+						(curr_lwr[j] - curr_mdl[j]) * (hun);
 
+			
 			elem_x *= phix;
 			elem_y *= phiy;
 
@@ -212,7 +292,7 @@ int main(int argc, char *argv[]) {
 		calc_step(&plane, tou);
 		// sprintf(fname, "prev%d", i);
 		// write_to_file(fname, plane.prev, Nx * Ny);
-		sprintf(fname, "curr%d", i);
+		sprintf(fname, "data/ncurr%d", i);
 		if (i % 50 == 0) {
 			write_to_file(fname, plane.curr, Nx * Ny);
 		}
